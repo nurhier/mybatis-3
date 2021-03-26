@@ -44,7 +44,7 @@ public class UnpooledDataSourceFactory implements DataSourceFactory {
     MetaObject metaDataSource = SystemMetaObject.forObject(dataSource);
     for (Object key : properties.keySet()) {
       String propertyName = (String) key;
-      if (propertyName.startsWith(DRIVER_PROPERTY_PREFIX)) {
+      if (propertyName.startsWith(DRIVER_PROPERTY_PREFIX)) { // 以driver.开头的配置项是对DataSource的配置，记录到driverProperties中保存
         String value = properties.getProperty(propertyName);
         driverProperties.setProperty(propertyName.substring(DRIVER_PROPERTY_PREFIX_LENGTH), value);
       } else if (metaDataSource.hasSetter(propertyName)) {

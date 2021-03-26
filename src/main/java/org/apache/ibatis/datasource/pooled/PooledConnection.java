@@ -32,13 +32,13 @@ class PooledConnection implements InvocationHandler {
   private static final Class<?>[] IFACES = new Class<?>[] { Connection.class };
 
   private int hashCode = 0;
-  private PooledDataSource dataSource;
-  private Connection realConnection;
-  private Connection proxyConnection;
-  private long checkoutTimestamp;
-  private long createdTimestamp;
-  private long lastUsedTimestamp;
-  private int connectionTypeCode;
+  private PooledDataSource dataSource; // 记录当前 PooledConnection 对象所在的 PooledDataSource 对象 PooledConnection 是从该 PooledDataSource 中获取的；当调用 close()方法时会将 PooledConnection 放回该PooledDataSource中
+  private Connection realConnection; // 真正的数据库连接
+  private Connection proxyConnection; // 数据库连接的代理对象
+  private long checkoutTimestamp; // 从连接池中取出该连接的时间
+  private long createdTimestamp; // 该连接创建的时间
+  private long lastUsedTimestamp; // 最后一次被使用的时间
+  private int connectionTypeCode; // 由数据库 URL 、用户名和密码计算出来的 hash 值，可用于标识该连接所在的连接池
   private boolean valid;
 
   /*
@@ -232,8 +232,8 @@ class PooledConnection implements InvocationHandler {
   @Override
   public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
     String methodName = method.getName();
-    if (CLOSE.hashCode() == methodName.hashCode() && CLOSE.equals(methodName)) {
-      dataSource.pushConnection(this);
+    if (CLOSE.hashCode() == methodName.hashCode() && CLOSE.equals(methodName)) { // 如果调用 close()方法，则将其重新放入连接池，而不是真正关闭数据库连接
+      dataSource.pushConnection(this); // 放回到连接池中
       return null;
     } else {
       try {

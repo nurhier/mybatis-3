@@ -278,7 +278,7 @@ public class PooledDataSource implements DataSource {
   }
 
   /*
-   * Closes all active and idle connections in the pool
+   * Closes all active and idle connections in the pool // 配置变更时，清除所有连接
    */
   public void forceCloseAll() {
     synchronized (state) {
@@ -328,7 +328,7 @@ public class PooledDataSource implements DataSource {
   protected void pushConnection(PooledConnection conn) throws SQLException {
 
     synchronized (state) {
-      state.activeConnections.remove(conn);
+      state.activeConnections.remove(conn); // 活跃列表中删除当前连接
       if (conn.isValid()) {
         if (state.idleConnections.size() < poolMaximumIdleConnections && conn.getConnectionTypeCode() == expectedConnectionTypeCode) {
           state.accumulatedCheckoutTime += conn.getCheckoutTime();
@@ -336,20 +336,20 @@ public class PooledDataSource implements DataSource {
             conn.getRealConnection().rollback();
           }
           PooledConnection newConn = new PooledConnection(conn.getRealConnection(), this);
-          state.idleConnections.add(newConn);
+          state.idleConnections.add(newConn); // 放入空闲连接列表
           newConn.setCreatedTimestamp(conn.getCreatedTimestamp());
           newConn.setLastUsedTimestamp(conn.getLastUsedTimestamp());
           conn.invalidate();
           if (log.isDebugEnabled()) {
             log.debug("Returned connection " + newConn.getRealHashCode() + " to pool.");
           }
-          state.notifyAll();
+          state.notifyAll(); // 唤醒阻塞等待的线程
         } else {
           state.accumulatedCheckoutTime += conn.getCheckoutTime();
           if (!conn.getRealConnection().getAutoCommit()) {
             conn.getRealConnection().rollback();
           }
-          conn.getRealConnection().close();
+          conn.getRealConnection().close(); // 真正关闭连接
           if (log.isDebugEnabled()) {
             log.debug("Closed connection " + conn.getRealHashCode() + ".");
           }
@@ -372,40 +372,40 @@ public class PooledDataSource implements DataSource {
 
     while (conn == null) {
       synchronized (state) {
-        if (!state.idleConnections.isEmpty()) {
+        if (!state.idleConnections.isEmpty()) { // 空闲连接不为空
           // Pool has available connection
-          conn = state.idleConnections.remove(0);
+          conn = state.idleConnections.remove(0); // 获取空闲列表中第一个连接
           if (log.isDebugEnabled()) {
             log.debug("Checked out connection " + conn.getRealHashCode() + " from pool.");
           }
         } else {
-          // Pool does not have available connection
-          if (state.activeConnections.size() < poolMaximumActiveConnections) {
+          // Pool does not have available connection // 没有空闲可用的连接
+          if (state.activeConnections.size() < poolMaximumActiveConnections) { // 活跃连接数小于最大活跃连接数
             // Can create new connection
-            conn = new PooledConnection(dataSource.getConnection(), this);
+            conn = new PooledConnection(dataSource.getConnection(), this); // 创建新的数据库连接（真正的新建），封装成PooledConnection
             if (log.isDebugEnabled()) {
               log.debug("Created connection " + conn.getRealHashCode() + ".");
             }
           } else {
-            // Cannot create new connection
-            PooledConnection oldestActiveConnection = state.activeConnections.get(0);
-            long longestCheckoutTime = oldestActiveConnection.getCheckoutTime();
-            if (longestCheckoutTime > poolMaximumCheckoutTime) {
+            // Cannot create new connection // 活跃连接数已经达到最大活跃连接数阈值，无法新建连接
+            PooledConnection oldestActiveConnection = state.activeConnections.get(0); // 获取活跃连接列表中第一个，也是最早创建的连接
+            long longestCheckoutTime = oldestActiveConnection.getCheckoutTime(); // 获取最早创建的连接的线程持有此连接的时长
+            if (longestCheckoutTime > poolMaximumCheckoutTime) { // 持有时长超过配置的最大时长，记为连接超时
               // Can claim overdue connection
               state.claimedOverdueConnectionCount++;
               state.accumulatedCheckoutTimeOfOverdueConnections += longestCheckoutTime;
               state.accumulatedCheckoutTime += longestCheckoutTime;
-              state.activeConnections.remove(oldestActiveConnection);
-              if (!oldestActiveConnection.getRealConnection().getAutoCommit()) {
+              state.activeConnections.remove(oldestActiveConnection); // 将此超时连接移除活跃连接列表
+              if (!oldestActiveConnection.getRealConnection().getAutoCommit()) { // 如采超时连接未提交，则自动回滚（省略 try /catch 代码块）
                 oldestActiveConnection.getRealConnection().rollback();
               }
-              conn = new PooledConnection(oldestActiveConnection.getRealConnection(), this);
+              conn = new PooledConnection(oldestActiveConnection.getRealConnection(), this); //（关键点） 将超时的活跃连接封装成新的PooledConnection, 数据库连接未新建，从而达到的数据库连接复用
               oldestActiveConnection.invalidate();
               if (log.isDebugEnabled()) {
                 log.debug("Claimed overdue connection " + conn.getRealHashCode() + ".");
               }
             } else {
-              // Must wait
+              // Must wait //无空闲连接、无法创建新连接且无超时连接，只能阻塞等待
               try {
                 if (!countedWait) {
                   state.hadToWaitCount++;
@@ -415,16 +415,16 @@ public class PooledDataSource implements DataSource {
                   log.debug("Waiting as long as " + poolTimeToWait + " milliseconds for connection.");
                 }
                 long wt = System.currentTimeMillis();
-                state.wait(poolTimeToWait);
-                state.accumulatedWaitTime += System.currentTimeMillis() - wt;
+                state.wait(poolTimeToWait); // 阻塞等待，来一个阻塞一个，等待有释放连接的线程来唤醒
+                state.accumulatedWaitTime += System.currentTimeMillis() - wt; // 实际等待时间，累加
               } catch (InterruptedException e) {
                 break;
               }
             }
           }
         }
-        if (conn != null) {
-          if (conn.isValid()) {
+        if (conn != null) { // pooledConnection创建成功，没有被阻塞
+          if (conn.isValid()) { // 连接是否有效
             if (!conn.getRealConnection().getAutoCommit()) {
               conn.getRealConnection().rollback();
             }

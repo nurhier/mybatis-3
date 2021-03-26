@@ -36,7 +36,7 @@ import org.apache.ibatis.io.Resources;
  * @author Eduardo Macarron
  */
 public class UnpooledDataSource implements DataSource {
-  
+
   private ClassLoader driverClassLoader;
   private Properties driverProperties;
   private static Map<String, Driver> registeredDrivers = new ConcurrentHashMap<String, Driver>();
@@ -198,8 +198,8 @@ public class UnpooledDataSource implements DataSource {
 
   private Connection doGetConnection(Properties properties) throws SQLException {
     initializeDriver();
-    Connection connection = DriverManager.getConnection(url, properties);
-    configureConnection(connection);
+    Connection connection = DriverManager.getConnection(url, properties); // 真正的创建连接
+    configureConnection(connection); // 设置自动提交和事务隔离级别
     return connection;
   }
 
